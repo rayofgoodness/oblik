@@ -97,6 +97,9 @@ function normalizeData(raw) {
 /* ================== Журнал: розрахунки ================== */
 // Виторг за запис/день = термінал + каса готівка + розрахунок з постачальниками
 const revenueOf = (e) => sum([e.termT, e.cashK, e.suppliers]);
+// Готівка в касі після розрахунку з постачальниками
+const cashNetOf = (e) => sum([e.cashK, -(e.suppliers || 0)]);
+const netCell = (n) => numCell(n, n < 0 ? 'c-neg' : '');
 const PERCENT = 5;
 const percentOf = (n) => Math.round(n * PERCENT) / 100; // 5% від суми, до копійки
 const entriesOf = (month) => data.entries.filter((e) => e.date.slice(0, 7) === month)
@@ -108,6 +111,7 @@ function totalsOf(list) {
     termT: sum(list.map((e) => e.termT)),
     cashK: sum(list.map((e) => e.cashK)),
     suppliers: sum(list.map((e) => e.suppliers)),
+    cashNet: sum(list.map(cashNetOf)),
     revenue: sum(list.map(revenueOf)),
     writeoff: sum(list.map((e) => e.writeoff)),
   };
@@ -153,6 +157,7 @@ function renderJournal() {
         ${numCell(e.termT)}
         ${numCell(e.cashK)}
         ${numCell(e.suppliers)}
+        ${netCell(cashNetOf(e))}
         ${numCell(revenueOf(e), 'c-kasa')}
         ${numCell(percentOf(revenueOf(e)))}
         ${numCell(e.writeoff, 'c-writeoff')}
@@ -167,7 +172,7 @@ function renderJournal() {
       const t = totalsOf(dayList);
       rows.push(`<tr class="day-sum">
         <td></td><td>Сума за ${fmtDate(day).slice(0, 5)}</td>
-        ${numCell(t.income)}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff)}
+        ${numCell(t.income)}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${netCell(t.cashNet)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff)}
         <td></td><td class="no-print"></td></tr>`);
     }
   }
@@ -177,7 +182,7 @@ function renderJournal() {
   const t = totalsOf(list);
   $('#journalTable tfoot').innerHTML = list.length ? `<tr>
     <td colspan="2">Заг:</td>
-    ${numCell(t.income, 'c-income')}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff, 'c-writeoff')}
+    ${numCell(t.income, 'c-income')}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${netCell(t.cashNet)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff, 'c-writeoff')}
     <td></td><td class="no-print"></td></tr>` : '';
 
   const op = openingOf(currentMonth);
@@ -194,6 +199,7 @@ function renderJournal() {
     <div class="sum-row muted sub"><span>термінал</span><span>${money(t.termT)}</span></div>
     <div class="sum-row muted sub"><span>каса готівка</span><span>${money(t.cashK)}</span></div>
     <div class="sum-row muted sub"><span>витрати (постачальникам)</span><span>${money(t.suppliers)}</span></div>
+    <div class="sum-row"><span>Готівка − витрати</span><span>${money(t.cashNet)}</span></div>
     <div class="sum-row"><span>${PERCENT}% від виторгу</span><span>${money(percentOf(t.revenue))}</span></div>
     <div class="sum-row"><span>− Списання</span><span class="c-writeoff">${money(t.writeoff)}</span></div>
     <div class="sum-row total"><span>Залишок на кінець</span><strong>${money(closing)}</strong></div>`;
@@ -410,9 +416,9 @@ const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(';')).join('\r\n');
 $('#btnJournalCsv').addEventListener('click', () => {
   const list = entriesOf(currentMonth);
   const t = totalsOf(list);
-  const rows = [['Дата', 'Найменування', 'Надходження', 'Каса термінал', 'Каса готівка', 'Витрати (постачальникам)', 'Виторг', `${PERCENT}%`, 'Списання', 'Коментар']];
-  for (const e of list) rows.push([fmtDate(e.date), e.name, e.income, e.termT, e.cashK, e.suppliers, revenueOf(e), percentOf(revenueOf(e)), e.writeoff, e.comment]);
-  rows.push(['Заг:', '', t.income, t.termT, t.cashK, t.suppliers, t.revenue, percentOf(t.revenue), t.writeoff, '']);
+  const rows = [['Дата', 'Найменування', 'Надходження', 'Каса термінал', 'Каса готівка', 'Витрати (постачальникам)', 'Готівка − витрати', 'Виторг', `${PERCENT}%`, 'Списання', 'Коментар']];
+  for (const e of list) rows.push([fmtDate(e.date), e.name, e.income, e.termT, e.cashK, e.suppliers, cashNetOf(e), revenueOf(e), percentOf(revenueOf(e)), e.writeoff, e.comment]);
+  rows.push(['Заг:', '', t.income, t.termT, t.cashK, t.suppliers, t.cashNet, t.revenue, percentOf(t.revenue), t.writeoff, '']);
   rows.push([]);
   rows.push(['Початковий залишок', '', openingOf(currentMonth).value]);
   rows.push(['Залишок на кінець', '', closingOf(currentMonth)]);
