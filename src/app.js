@@ -95,8 +95,8 @@ function normalizeData(raw) {
 }
 
 /* ================== Журнал: розрахунки ================== */
-// Виторг за запис/день = термінал + каса готівка + розрахунок з постачальниками
-const revenueOf = (e) => sum([e.termT, e.cashK, e.suppliers]);
+// Виторг за запис/день = термінал + каса готівка
+const revenueOf = (e) => sum([e.termT, e.cashK]);
 // Готівка в касі після розрахунку з постачальниками
 const cashNetOf = (e) => sum([e.cashK, -(e.suppliers || 0)]);
 const netCell = (n) => numCell(n, n < 0 ? 'c-neg' : '');
@@ -195,10 +195,10 @@ function renderJournal() {
   $('#summary').innerHTML = `
     <div class="sum-row"><span>Початковий залишок</span><span>${money(op.value)}</span></div>
     <div class="sum-row"><span>+ Надходження</span><span class="c-income">${money(t.income)}</span></div>
-    <div class="sum-row"><span>− Виторг (Т + К + витрати)</span><span class="c-kasa">${money(t.revenue)}</span></div>
+    <div class="sum-row"><span>− Виторг (термінал + каса готівка)</span><span class="c-kasa">${money(t.revenue)}</span></div>
     <div class="sum-row muted sub"><span>термінал</span><span>${money(t.termT)}</span></div>
     <div class="sum-row muted sub"><span>каса готівка</span><span>${money(t.cashK)}</span></div>
-    <div class="sum-row muted sub"><span>витрати (постачальникам)</span><span>${money(t.suppliers)}</span></div>
+    <div class="sum-row"><span>Витрати (постачальникам)</span><span>${money(t.suppliers)}</span></div>
     <div class="sum-row"><span>Готівка − витрати</span><span>${money(t.cashNet)}</span></div>
     <div class="sum-row"><span>${PERCENT}% від виторгу</span><span>${money(percentOf(t.revenue))}</span></div>
     <div class="sum-row"><span>− Списання</span><span class="c-writeoff">${money(t.writeoff)}</span></div>
