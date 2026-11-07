@@ -1,0 +1,227 @@
+:root {
+  --bg: #f4f1ea;
+  --card: #fffdf8;
+  --ink: #1f2328;
+  --muted: #6b6f76;
+  --line: #e2ddd2;
+  --accent: #1f6f5c;
+  --accent-ink: #ffffff;
+  --income: #2f7d32;
+  --kasa: #b0306b;
+  --writeoff: #a3620a;
+  --danger: #b42318;
+  --focus: #f2c94c;
+  font-size: 17px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.35;
+}
+
+.hidden { display: none !important; }
+
+/* ---------- Верхня панель ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 24px;
+  padding: 10px 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.topbar h1 { font-size: 1.25rem; margin: 0; font-weight: 700; white-space: nowrap; }
+.topbar .tab, .topbar .btn, .save-status { white-space: nowrap; }
+.topbar { flex-wrap: wrap; row-gap: 8px; }
+.tabs { display: flex; gap: 4px; }
+.tab {
+  font: inherit; font-weight: 600;
+  padding: 9px 18px;
+  border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.tab:hover { color: var(--ink); background: var(--bg); }
+.tab.active { background: var(--accent); color: var(--accent-ink); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.save-status { color: var(--muted); font-size: .9rem; }
+.font-ctl { display: flex; align-items: center; gap: 6px; }
+.font-ctl .btn { padding: 6px 12px; }
+#fontSizeLabel { min-width: 2ch; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Сторінка ---------- */
+.page { padding: 18px 24px 40px; max-width: 1500px; margin: 0 auto; }
+.toolbar { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.spacer { flex: 1; }
+.hint { color: var(--muted); font-size: .88rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+/* ---------- Поля ---------- */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > span { font-size: .85rem; color: var(--muted); font-weight: 600; }
+.field.inline > span { font-size: .85rem; }
+input, select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid #cfc8ba; border-radius: 8px;
+  background: #fff; color: var(--ink);
+  min-width: 0;
+}
+input:focus, select:focus, button:focus-visible {
+  outline: 3px solid var(--focus); outline-offset: 1px;
+}
+input.num { text-align: right; font-variant-numeric: tabular-nums; }
+#opening { width: 170px; font-weight: 700; }
+
+.entry-form .form-title { font-weight: 700; margin-bottom: 10px; }
+.entry-form.editing { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31,111,92,.15); }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.grid .field.wide { grid-column: span 2; }
+.grid .field.wide:last-child { grid-column: 1 / -1; }
+.form-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+
+/* ---------- Кнопки ---------- */
+.btn {
+  font: inherit; font-weight: 600;
+  padding: 9px 16px; border-radius: 8px;
+  border: 1px solid #cfc8ba; background: #fff; color: var(--ink);
+  cursor: pointer;
+}
+.btn:hover { background: var(--bg); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.icon-btn {
+  font: inherit; border: none; background: transparent; cursor: pointer;
+  padding: 4px 8px; border-radius: 6px; color: var(--muted);
+}
+.icon-btn:hover { background: var(--bg); color: var(--ink); }
+.icon-btn.del:hover { color: var(--danger); }
+
+/* ---------- Таблиці ---------- */
+.table-card { padding: 0; overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.table th, .table td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.table th { font-size: .82rem; color: var(--muted); font-weight: 700; background: #faf7f0; position: sticky; top: 0; }
+.table td.wrap { white-space: normal; min-width: 160px; }
+.table .r { text-align: right; }
+.table .c { text-align: center; }
+.table tbody tr:hover { background: #fbf8f1; }
+.table tr.day-sum td { background: #f7f3ea; font-weight: 600; color: var(--muted); font-size: .9rem; }
+.table tfoot td { font-weight: 800; border-top: 2px solid var(--ink); border-bottom: none; background: #faf7f0; }
+.table tr.day-start td { border-top: 2px solid #d6cfbf; }
+.c-income { color: var(--income); }
+.c-kasa { color: var(--kasa); }
+.c-writeoff { color: var(--writeoff); }
+.zero { color: #c3bdb0; }
+.empty { padding: 24px; text-align: center; color: var(--muted); margin: 0; }
+
+/* Залишки: редагування в таблиці */
+.stock input { width: 100%; padding: 6px 8px; }
+.stock td { padding: 5px 8px; }
+.stock .col-name { min-width: 260px; }
+.stock .col-qty input, .stock .col-price input { width: 130px; }
+.stock .col-unit select { padding: 6px 8px; }
+.stock .unit-hint { display: inline-block; width: 44px; text-align: left; font-size: .78rem; color: var(--muted); margin-left: 6px; }
+.stock td.sum { font-weight: 700; min-width: 120px; }
+
+/* ---------- Підсумок ---------- */
+.summary { max-width: 520px; margin-left: auto; }
+.sum-row { display: flex; justify-content: space-between; gap: 20px; padding: 6px 0; font-variant-numeric: tabular-nums; }
+.sum-row.total { border-top: 2px solid var(--ink); margin-top: 6px; padding-top: 10px; font-size: 1.25rem; }
+.sum-row.total strong { color: var(--accent); }
+.sum-row.muted { color: var(--muted); font-size: .92rem; }
+.sum-row .formula { color: var(--muted); font-size: .85rem; }
+
+dialog { border: none; border-radius: 12px; padding: 22px 24px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog p { margin: 0 0 6px; font-size: 1.05rem; }
+
+.print-title { display: none; }
+
+/* ---------- Друк ---------- */
+@media print {
+  :root { font-size: 11px; }
+  body { background: #fff; }
+  .topbar, .toolbar, .entry-form, .no-print, dialog { display: none !important; }
+  .page { padding: 0; max-width: none; }
+  .card { border: none; padding: 0; margin-bottom: 10px; }
+  .print-title { display: block; font-size: 1.3rem; font-weight: 700; margin-bottom: 8px; }
+  .table th { position: static; }
+  .table th, .table td { padding: 3px 6px; }
+  .stock input, .stock select { border: none; padding: 0; background: transparent; appearance: none; }
+  .summary { max-width: 360px; }
+}
+
+/* Відхилений символ у числовому полі */
+input.num.rejected { animation: reject .6s ease; }
+@keyframes reject {
+  0%, 60% { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(180,35,24,.2); }
+  100% { border-color: #cfc8ba; box-shadow: none; }
+}
+
+.stock td.added { color: var(--muted); font-size: .9rem; }
+
+/* ---------- Лише для програми на ПК ---------- */
+body:not(.is-desktop) .desktop-only { display: none !important; }
+
+/* ---------- iPhone: безпечні зони (виріз, нижня смужка) ---------- */
+.topbar { padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+.page { padding-bottom: max(40px, env(safe-area-inset-bottom)); }
+dialog { max-width: min(480px, 92vw); }
+
+/* ---------- Телефон ---------- */
+@media (max-width: 760px) {
+  .topbar { position: static; padding: max(8px, env(safe-area-inset-top)) 12px 8px; gap: 8px; }
+  .topbar h1 { font-size: 1.1rem; }
+  .tabs { order: 3; width: 100%; }
+  .tab { flex: 1; padding: 10px 8px; }
+  .topbar-right { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 8px; order: 4; }
+  .save-status { width: 100%; }
+  .topbar-right .btn { flex: 1; }
+  .font-ctl .btn { flex: 0 0 auto; }
+
+  .page { padding: 12px 12px max(32px, env(safe-area-inset-bottom)); }
+  .toolbar { gap: 10px; }
+  .toolbar .field.inline { flex: 1 1 140px; }
+  #opening { width: 100%; }
+  .toolbar .spacer { display: none; }
+  .toolbar .btn { flex: 1; }
+
+  .card { padding: 12px; border-radius: 10px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .field input, .field select { width: 100%; }
+  .grid .field:first-child { grid-column: 1 / -1; }
+  .form-actions { flex-wrap: wrap; }
+  .form-actions .btn { flex: 1; }
+  .form-actions .hint { width: 100%; }
+
+  /* Таблиці гортаються вбік пальцем */
+  .table-card { -webkit-overflow-scrolling: touch; }
+  .table th, .table td { padding: 8px; }
+  .stock .col-name { min-width: 170px; }
+  .stock .col-qty input, .stock .col-price input { width: 96px; }
+
+  .summary { max-width: none; }
+  .btn, .tab, input, select { min-height: 44px; }
+  .icon-btn { min-width: 40px; min-height: 40px; }
+}
+
+/* iOS збільшує сторінку при фокусі на полі з шрифтом < 16px */
+@supports (-webkit-touch-callout: none) {
+  input, select { font-size: max(16px, 1rem); }
+}

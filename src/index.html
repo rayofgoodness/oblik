@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f6f5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Облік">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Облік магазину</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Облік магазину</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="journal" role="tab">Журнал</button>
+      <button class="tab" data-tab="stock" role="tab">Залишки товару</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="saveStatus" class="save-status"></span>
+      <div class="font-ctl" title="Розмір шрифту">
+        <button id="btnFontDown" class="btn ghost" aria-label="Зменшити шрифт">А−</button>
+        <span id="fontSizeLabel">17</span>
+        <button id="btnFontUp" class="btn ghost" aria-label="Збільшити шрифт">А+</button>
+      </div>
+      <button id="btnBackup" class="btn ghost" title="Зберегти всі дані в один файл">Зберегти копію</button>
+      <button id="btnRestore" class="btn ghost" title="Завантажити дані з файлу копії">Відновити</button>
+      <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      <button id="btnFolder" class="btn ghost desktop-only" title="Папка, де лежать дані та резервні копії">Папка з даними</button>
+    </div>
+  </header>
+
+  <!-- ===== Журнал ===== -->
+  <main id="tab-journal" class="page">
+    <section class="toolbar">
+      <label class="field inline">
+        <span>Місяць</span>
+        <input type="month" id="month">
+      </label>
+      <label class="field inline">
+        <span>Початковий залишок</span>
+        <input type="text" id="opening" inputmode="decimal" class="num" data-signed>
+      </label>
+      <span id="openingHint" class="hint"></span>
+      <div class="spacer"></div>
+      <button id="btnJournalCsv" class="btn ghost">Excel (CSV)</button>
+      <button id="btnJournalPrint" class="btn ghost">Друк</button>
+    </section>
+
+    <form id="entryForm" class="card entry-form" autocomplete="off">
+      <div class="form-title" id="formTitle">Новий запис</div>
+      <div class="grid">
+        <label class="field"><span>Дата</span><input type="date" name="date" required></label>
+        <label class="field wide"><span>Найменування товару / постачальник</span><input type="text" name="name" list="nameList"></label>
+        <label class="field"><span>Надходження</span><input type="text" name="income" inputmode="decimal" class="num"></label>
+        <label class="field"><span>Каса: термінал (Т)</span><input type="text" name="termT" inputmode="decimal" class="num"></label>
+        <label class="field"><span>Каса: готівка (К)</span><input type="text" name="cashK" inputmode="decimal" class="num"></label>
+        <label class="field"><span>Готівка</span><input type="text" name="cash" inputmode="decimal" class="num" data-signed></label>
+        <label class="field"><span>Списання</span><input type="text" name="writeoff" inputmode="decimal" class="num"></label>
+        <label class="field wide"><span>Коментар</span><input type="text" name="comment"></label>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn primary" id="btnSubmit">Додати запис</button>
+        <button type="button" class="btn ghost hidden" id="btnCancelEdit">Скасувати</button>
+        <span class="hint">Порожнє поле = 0. Можна писати з комою: 1234,50</span>
+      </div>
+      <datalist id="nameList"></datalist>
+    </form>
+
+    <section class="card table-card">
+      <div class="print-title" id="journalPrintTitle"></div>
+      <table class="table" id="journalTable">
+        <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Найменування</th>
+            <th class="r">Надходження</th>
+            <th class="r">Каса Т</th>
+            <th class="r">Каса К</th>
+            <th class="r">Каса разом</th>
+            <th class="r">Готівка</th>
+            <th class="r">Списання</th>
+            <th>Коментар</th>
+            <th class="no-print"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+      <p class="empty hidden" id="journalEmpty">За цей місяць записів немає.</p>
+    </section>
+
+    <section class="card summary" id="summary"></section>
+  </main>
+
+  <!-- ===== Залишки товару ===== -->
+  <main id="tab-stock" class="page hidden">
+    <section class="toolbar">
+      <label class="field inline">
+        <span>Пошук</span>
+        <input type="search" id="stockSearch" placeholder="Назва товару">
+      </label>
+      <div class="spacer"></div>
+      <button id="btnStockAdd" class="btn primary">+ Додати товар</button>
+      <button id="btnStockCsv" class="btn ghost">Excel (CSV)</button>
+      <button id="btnStockPrint" class="btn ghost">Друк</button>
+    </section>
+
+    <section class="card table-card">
+      <div class="print-title" id="stockPrintTitle"></div>
+      <table class="table stock" id="stockTable">
+        <thead>
+          <tr>
+            <th class="c">№</th>
+            <th>Найменування</th>
+            <th>Одиниця</th>
+            <th class="r">Кількість</th>
+            <th class="r">Ціна</th>
+            <th class="r">Сума</th>
+            <th>Дата додавання</th>
+            <th class="no-print"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="empty hidden" id="stockEmpty">Товарів ще немає. Натисніть «+ Додати товар».</p>
+    </section>
+
+    <section class="card summary">
+      <div class="sum-row total">
+        <span>Всього товару на суму</span>
+        <strong id="stockTotal">0,00</strong>
+      </div>
+      <div class="sum-row muted"><span>Позицій</span><span id="stockCount">0</span></div>
+    </section>
+  </main>
+
+  <dialog id="confirmDialog">
+    <p id="confirmText"></p>
+    <div class="form-actions">
+      <button class="btn danger" id="confirmYes">Так, видалити</button>
+      <button class="btn ghost" id="confirmNo">Ні</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

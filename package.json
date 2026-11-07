@@ -1,0 +1,55 @@
+{
+  "name": "oblik",
+  "productName": "Oblik",
+  "version": "1.0.0",
+  "description": "Облік магазину — офлайн",
+  "author": {
+    "name": "rayofgoodness",
+    "url": "https://github.com/rayofgoodness"
+  },
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:win-zip": "electron-builder --win zip --x64"
+  },
+  "build": {
+    "appId": "ua.shop.oblik",
+    "productName": "Oblik",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Облік магазину",
+      "uninstallDisplayName": "Облік магазину",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Oblik-Setup-${version}.${ext}",
+      "installerLanguages": [
+        "uk_UA"
+      ],
+      "language": "1058"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  }
+}
