@@ -29,7 +29,7 @@ const store = window.api || {
   print: async () => window.print(),
 };
 
-let data = { version: 1, entries: [], openings: {}, stock: [] };
+let data = { version: 2, entries: [], openings: {}, stock: [] };
 
 /* ================== Числа ================== */
 // "1 234,50" / "1234.5" → 1234.5 ; порожнє → 0 ; сміття → NaN
@@ -82,8 +82,23 @@ function persist() {
   }, 250);
 }
 
+// Приведення даних до поточної схеми (у т.ч. зі старих копій).
+// v1 → v2: колонка «Готівка» (cash) стала «Витрати постачальникам» (suppliers).
+function normalizeData(raw) {
+  const d = { version: 2, entries: [], openings: {}, stock: [], ...raw };
+  for (const e of d.entries) {
+    if (e.suppliers == null) e.suppliers = Math.abs(e.cash || 0);
+    delete e.cash;
+  }
+  d.version = 2;
+  return d;
+}
+
 /* ================== Журнал: розрахунки ================== */
-const kasaOf = (e) => sum([e.termT, e.cashK]);
+// Виторг за запис/день = термінал + каса готівка + розрахунок з постачальниками
+const revenueOf = (e) => sum([e.termT, e.cashK, e.suppliers]);
+const PERCENT = 5;
+const percentOf = (n) => Math.round(n * PERCENT) / 100; // 5% від суми, до копійки
 const entriesOf = (month) => data.entries.filter((e) => e.date.slice(0, 7) === month)
   .sort((a, b) => a.date.localeCompare(b.date) || a.created - b.created);
 
@@ -92,8 +107,8 @@ function totalsOf(list) {
     income: sum(list.map((e) => e.income)),
     termT: sum(list.map((e) => e.termT)),
     cashK: sum(list.map((e) => e.cashK)),
-    kasa: sum(list.map(kasaOf)),
-    cash: sum(list.map((e) => e.cash)),
+    suppliers: sum(list.map((e) => e.suppliers)),
+    revenue: sum(list.map(revenueOf)),
     writeoff: sum(list.map((e) => e.writeoff)),
   };
 }
@@ -112,7 +127,7 @@ function openingOf(month) {
 }
 function closingOf(month) {
   const t = totalsOf(entriesOf(month));
-  return sum([openingOf(month).value, t.income, -t.kasa, -t.writeoff]);
+  return sum([openingOf(month).value, t.income, -t.revenue, -t.writeoff]);
 }
 
 /* ================== Журнал: відображення ================== */
@@ -137,8 +152,9 @@ function renderJournal() {
         ${numCell(e.income, 'c-income')}
         ${numCell(e.termT)}
         ${numCell(e.cashK)}
-        ${numCell(kasaOf(e), 'c-kasa')}
-        ${numCell(e.cash)}
+        ${numCell(e.suppliers)}
+        ${numCell(revenueOf(e), 'c-kasa')}
+        ${numCell(percentOf(revenueOf(e)))}
         ${numCell(e.writeoff, 'c-writeoff')}
         <td class="wrap">${esc(e.comment)}</td>
         <td class="no-print r">
@@ -151,7 +167,7 @@ function renderJournal() {
       const t = totalsOf(dayList);
       rows.push(`<tr class="day-sum">
         <td></td><td>Сума за ${fmtDate(day).slice(0, 5)}</td>
-        ${numCell(t.income)}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.kasa)}${numCell(t.cash)}${numCell(t.writeoff)}
+        ${numCell(t.income)}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff)}
         <td></td><td class="no-print"></td></tr>`);
     }
   }
@@ -161,7 +177,7 @@ function renderJournal() {
   const t = totalsOf(list);
   $('#journalTable tfoot').innerHTML = list.length ? `<tr>
     <td colspan="2">Заг:</td>
-    ${numCell(t.income, 'c-income')}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.kasa, 'c-kasa')}${numCell(t.cash)}${numCell(t.writeoff, 'c-writeoff')}
+    ${numCell(t.income, 'c-income')}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff, 'c-writeoff')}
     <td></td><td class="no-print"></td></tr>` : '';
 
   const op = openingOf(currentMonth);
@@ -174,10 +190,13 @@ function renderJournal() {
   $('#summary').innerHTML = `
     <div class="sum-row"><span>Початковий залишок</span><span>${money(op.value)}</span></div>
     <div class="sum-row"><span>+ Надходження</span><span class="c-income">${money(t.income)}</span></div>
-    <div class="sum-row"><span>− Каса (Т + К)</span><span class="c-kasa">${money(t.kasa)}</span></div>
+    <div class="sum-row"><span>− Виторг (Т + К + витрати)</span><span class="c-kasa">${money(t.revenue)}</span></div>
+    <div class="sum-row muted sub"><span>термінал</span><span>${money(t.termT)}</span></div>
+    <div class="sum-row muted sub"><span>каса готівка</span><span>${money(t.cashK)}</span></div>
+    <div class="sum-row muted sub"><span>витрати (постачальникам)</span><span>${money(t.suppliers)}</span></div>
+    <div class="sum-row"><span>${PERCENT}% від виторгу</span><span>${money(percentOf(t.revenue))}</span></div>
     <div class="sum-row"><span>− Списання</span><span class="c-writeoff">${money(t.writeoff)}</span></div>
-    <div class="sum-row total"><span>Залишок на кінець</span><strong>${money(closing)}</strong></div>
-    <div class="sum-row muted"><span>Готівка за місяць (окремо)</span><span>${money(t.cash)}</span></div>`;
+    <div class="sum-row total"><span>Залишок на кінець</span><strong>${money(closing)}</strong></div>`;
 
   $('#journalPrintTitle').textContent = 'Журнал обліку — ' + monthTitle(currentMonth);
 
@@ -188,7 +207,7 @@ function renderJournal() {
 
 /* ================== Журнал: форма ================== */
 const form = $('#entryForm');
-const NUM_FIELDS = ['income', 'termT', 'cashK', 'cash', 'writeoff'];
+const NUM_FIELDS = ['income', 'termT', 'cashK', 'suppliers', 'writeoff'];
 
 function resetForm(keepDate) {
   const date = form.date.value;
@@ -391,9 +410,9 @@ const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(';')).join('\r\n');
 $('#btnJournalCsv').addEventListener('click', () => {
   const list = entriesOf(currentMonth);
   const t = totalsOf(list);
-  const rows = [['Дата', 'Найменування', 'Надходження', 'Каса Т', 'Каса К', 'Каса разом', 'Готівка', 'Списання', 'Коментар']];
-  for (const e of list) rows.push([fmtDate(e.date), e.name, e.income, e.termT, e.cashK, kasaOf(e), e.cash, e.writeoff, e.comment]);
-  rows.push(['Заг:', '', t.income, t.termT, t.cashK, t.kasa, t.cash, t.writeoff, '']);
+  const rows = [['Дата', 'Найменування', 'Надходження', 'Каса термінал', 'Каса готівка', 'Витрати (постачальникам)', 'Виторг', `${PERCENT}%`, 'Списання', 'Коментар']];
+  for (const e of list) rows.push([fmtDate(e.date), e.name, e.income, e.termT, e.cashK, e.suppliers, revenueOf(e), percentOf(revenueOf(e)), e.writeoff, e.comment]);
+  rows.push(['Заг:', '', t.income, t.termT, t.cashK, t.suppliers, t.revenue, percentOf(t.revenue), t.writeoff, '']);
   rows.push([]);
   rows.push(['Початковий залишок', '', openingOf(currentMonth).value]);
   rows.push(['Залишок на кінець', '', closingOf(currentMonth)]);
@@ -445,7 +464,7 @@ $('#restoreFile').addEventListener('change', async (ev) => {
   confirmDelete(
     `Замінити всі поточні дані даними з копії? У копії: ${parsed.entries.length} записів журналу, ${parsed.stock.length} товарів. Поточні дані буде втрачено.`,
     () => {
-      data = { version: 1, entries: [], openings: {}, stock: [], ...parsed };
+      data = normalizeData(parsed);
       persist();
       applyFont();
       resetForm(false);
@@ -530,7 +549,7 @@ document.addEventListener('animationend', (ev) => ev.target.classList?.remove('r
 (async function init() {
   const loaded = await store.load();
   if (loaded && typeof loaded === 'object') {
-    data = { version: 1, entries: [], openings: {}, stock: [], ...loaded };
+    data = normalizeData(loaded);
   }
   applyFont();
   document.body.classList.toggle('is-desktop', IS_DESKTOP);

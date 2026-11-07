@@ -225,3 +225,4 @@ dialog { max-width: min(480px, 92vw); }
 @supports (-webkit-touch-callout: none) {
   input, select { font-size: max(16px, 1rem); }
 }
+.sum-row.sub { padding: 2px 0 2px 18px; }

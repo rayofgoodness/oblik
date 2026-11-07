@@ -59,9 +59,9 @@
         <label class="field"><span>Дата</span><input type="date" name="date" required></label>
         <label class="field wide"><span>Найменування товару / постачальник</span><input type="text" name="name" list="nameList"></label>
         <label class="field"><span>Надходження</span><input type="text" name="income" inputmode="decimal" class="num"></label>
-        <label class="field"><span>Каса: термінал (Т)</span><input type="text" name="termT" inputmode="decimal" class="num"></label>
-        <label class="field"><span>Каса: готівка (К)</span><input type="text" name="cashK" inputmode="decimal" class="num"></label>
-        <label class="field"><span>Готівка</span><input type="text" name="cash" inputmode="decimal" class="num" data-signed></label>
+        <label class="field"><span>Термінал</span><input type="text" name="termT" inputmode="decimal" class="num"></label>
+        <label class="field"><span>Каса готівка</span><input type="text" name="cashK" inputmode="decimal" class="num"></label>
+        <label class="field"><span>Витрати (постачальникам)</span><input type="text" name="suppliers" inputmode="decimal" class="num" title="Розрахунок з постачальниками з каси"></label>
         <label class="field"><span>Списання</span><input type="text" name="writeoff" inputmode="decimal" class="num"></label>
         <label class="field wide"><span>Коментар</span><input type="text" name="comment"></label>
       </div>
@@ -81,10 +81,11 @@
             <th>Дата</th>
             <th>Найменування</th>
             <th class="r">Надходження</th>
-            <th class="r">Каса Т</th>
-            <th class="r">Каса К</th>
-            <th class="r">Каса разом</th>
-            <th class="r">Готівка</th>
+            <th class="r">Термінал</th>
+            <th class="r">Каса готівка</th>
+            <th class="r">Витрати<br><small>постачальникам</small></th>
+            <th class="r">Виторг</th>
+            <th class="r">5%</th>
             <th class="r">Списання</th>
             <th>Коментар</th>
             <th class="no-print"></th>
