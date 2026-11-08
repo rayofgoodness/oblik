@@ -227,3 +227,21 @@ dialog { max-width: min(480px, 92vw); }
 }
 .sum-row.sub { padding: 2px 0 2px 18px; }
 .c-neg { color: var(--danger); }
+
+/* ---------- Вхід ---------- */
+body.locked > header.topbar, body.locked > main { display: none !important; }
+body:not(.locked) .lock { display: none; }
+.lock {
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+.lock-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; padding: 28px 24px; }
+.lock-card h2 { margin: 0; font-size: 1.4rem; }
+.lock-card .hint { margin: -6px 0 0; }
+.lock-card input { width: 100%; }
+.lock-icon { border-radius: 14px; }
+.lock-card .btn { width: 100%; padding: 12px; }
+.auth-error { color: var(--danger); margin: 0; min-height: 1.2em; font-size: .92rem; }
+#passForm { display: flex; flex-direction: column; gap: 12px; min-width: min(340px, 80vw); }
+#passForm h3 { margin: 0; }

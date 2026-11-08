@@ -15,7 +15,24 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="locked">
+  <!-- ===== Вхід ===== -->
+  <div id="lockScreen" class="lock">
+    <form id="authForm" class="card lock-card" autocomplete="on" novalidate>
+      <img src="icons/icon-192.png" alt="" class="lock-icon" width="64" height="64">
+      <h2 id="authTitle">Вхід</h2>
+      <p id="authHint" class="hint"></p>
+      <label class="field"><span>Номер телефону</span>
+        <input type="tel" id="authPhone" name="username" autocomplete="username" inputmode="tel" placeholder="0XX XXX XX XX" required></label>
+      <label class="field"><span>Пароль</span>
+        <input type="password" id="authPass" name="password" autocomplete="current-password" required></label>
+      <label class="field hidden" id="authPass2Field"><span>Повторіть пароль</span>
+        <input type="password" id="authPass2" autocomplete="new-password"></label>
+      <p id="authError" class="auth-error" role="alert"></p>
+      <button type="submit" class="btn primary" id="authSubmit">Увійти</button>
+    </form>
+  </div>
+
   <header class="topbar">
     <h1>Облік магазину</h1>
     <nav class="tabs" role="tablist">
@@ -33,6 +50,8 @@
       <button id="btnRestore" class="btn ghost" title="Завантажити дані з файлу копії">Відновити</button>
       <input type="file" id="restoreFile" accept=".json,application/json" hidden>
       <button id="btnFolder" class="btn ghost desktop-only" title="Папка, де лежать дані та резервні копії">Папка з даними</button>
+      <button id="btnChangePass" class="btn ghost" title="Змінити номер або пароль для входу">Пароль</button>
+      <button id="btnLogout" class="btn ghost">Вийти</button>
     </div>
   </header>
 
@@ -142,6 +161,21 @@
       <div class="sum-row muted"><span>Позицій</span><span id="stockCount">0</span></div>
     </section>
   </main>
+
+  <dialog id="passDialog">
+    <form id="passForm" method="dialog" novalidate>
+      <h3>Змінити вхід</h3>
+      <label class="field"><span>Поточний пароль</span><input type="password" id="pwOld" autocomplete="current-password"></label>
+      <label class="field"><span>Номер телефону</span><input type="tel" id="pwPhone" inputmode="tel" autocomplete="username"></label>
+      <label class="field"><span>Новий пароль</span><input type="password" id="pwNew" autocomplete="new-password"></label>
+      <label class="field"><span>Повторіть новий пароль</span><input type="password" id="pwNew2" autocomplete="new-password"></label>
+      <p id="pwError" class="auth-error" role="alert"></p>
+      <div class="form-actions">
+        <button type="submit" class="btn primary" id="pwSave">Зберегти</button>
+        <button type="button" class="btn ghost" id="pwCancel">Скасувати</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="confirmDialog">
     <p id="confirmText"></p>

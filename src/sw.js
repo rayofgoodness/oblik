@@ -1,6 +1,6 @@
 // Офлайн-кеш застосунку. При зміні файлів — збільшити VERSION,
 // тоді телефон завантажить нову версію при наступному відкритті з інтернетом.
-const VERSION = 'oblik-v4';
+const VERSION = 'oblik-v6';
 const FILES = [
   './',
   './index.html',
@@ -25,13 +25,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Спершу мережа (щоб бачити оновлення), без мережі — кеш
+// Спершу мережа (щоб бачити оновлення), без мережі — кеш.
+// Сайт закритий Cloudflare Access: коли сесія закінчилась, сервер перенаправляє
+// на сторінку входу. Такі відповіді не кешуємо — інакше замість застосунку
+// в кеші опиниться сторінка входу.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && res.type === 'basic' && !res.redirected) {
           const copy = res.clone();
           caches.open(VERSION).then((c) => c.put(event.request, copy));
         }

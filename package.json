@@ -1,7 +1,7 @@
 {
   "name": "oblik",
   "productName": "Oblik",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Облік магазину — офлайн",
   "author": {
     "name": "rayofgoodness",
@@ -12,7 +12,8 @@
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win --x64",
-    "dist:win-zip": "electron-builder --win zip --x64"
+    "dist:win-zip": "electron-builder --win zip --x64",
+    "deploy:web": "wrangler deploy"
   },
   "build": {
     "appId": "ua.shop.oblik",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "electron": "^45.2.3",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "wrangler": "^4.158.0"
   }
 }

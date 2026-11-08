@@ -71,6 +71,7 @@ function persist() {
   $('#saveStatus').textContent = 'Збереження…';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
+    saveTimer = null;
     try {
       await store.save(JSON.stringify(data, null, 1));
       const t = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
@@ -81,6 +82,14 @@ function persist() {
     }
   }, 250);
 }
+// Закриття вікна під час очікування збереження — зберегти негайно
+window.addEventListener('pagehide', () => {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const json = JSON.stringify(data, null, 1);
+  if (store.saveSync) store.saveSync(json); else store.save(json);
+});
 
 // Приведення даних до поточної схеми (у т.ч. зі старих копій).
 // v1 → v2: колонка «Готівка» (cash) стала «Витрати постачальникам» (suppliers).
@@ -450,7 +459,7 @@ function confirmDelete(text, onYes, yesLabel = 'Так, видалити') {
 /* ================== Резервна копія ================== */
 $('#btnBackup').addEventListener('click', async () => {
   const stamp = todayISO() + '_' + new Date().toTimeString().slice(0, 5).replace(':', '-');
-  const ok = await store.exportFile(`Облік-копія_${stamp}.json`, JSON.stringify(data, null, 1), 'json');
+  const ok = await store.exportFile(`Облік-копія_${stamp}.json`, JSON.stringify({ ...data, auth: undefined }, null, 1), 'json');
   if (ok) $('#saveStatus').textContent = 'Копію збережено';
 });
 
@@ -470,7 +479,7 @@ $('#restoreFile').addEventListener('change', async (ev) => {
   confirmDelete(
     `Замінити всі поточні дані даними з копії? У копії: ${parsed.entries.length} записів журналу, ${parsed.stock.length} товарів. Поточні дані буде втрачено.`,
     () => {
-      data = normalizeData(parsed);
+      data = normalizeData({ ...parsed, auth: data.auth });
       persist();
       applyFont();
       resetForm(false);
@@ -551,6 +560,145 @@ document.addEventListener('input', (ev) => {
 }, true);
 document.addEventListener('animationend', (ev) => ev.target.classList?.remove('rejected'));
 
+/* ================== Вхід (номер телефону + пароль) ==================
+   Облікові дані не зберігаються в коді: їх створюють при першому запуску на пристрої.
+   Зберігається лише хеш PBKDF2-SHA256 від «номер + пароль» з випадковою сіллю. */
+const AUTH_ITER = 310000;
+const MIN_PASS = 6;
+let sessionPhone = null;
+let appStarted = false;
+let authFails = 0;
+
+const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+// 067 105 08 34 / +380671050834 / 380671050834 → 0671050834 ; інакше null
+function normalizePhone(v) {
+  let d = String(v || '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('380')) d = '0' + d.slice(3);
+  if (d.length === 9) d = '0' + d;
+  return /^0\d{9}$/.test(d) ? d : null;
+}
+
+async function hashAuth(phone, pass, saltB64, iter) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(phone + '\n' + pass), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: fromB64(saltB64), iterations: iter, hash: 'SHA-256' }, key, 256);
+  return toB64(bits);
+}
+async function makeAuth(phone, pass) {
+  const salt = toB64(crypto.getRandomValues(new Uint8Array(16)));
+  return { salt, iter: AUTH_ITER, hash: await hashAuth(phone, pass, salt, AUTH_ITER) };
+}
+async function checkAuth(phone, pass) {
+  const a = data.auth;
+  return !!a && (await hashAuth(phone, pass, a.salt, a.iter)) === a.hash;
+}
+
+function showLock() {
+  const setup = !data.auth;
+  document.body.classList.add('locked');
+  $('#authTitle').textContent = setup ? 'Створіть вхід' : 'Вхід';
+  $('#authHint').textContent = setup
+    ? 'Перший запуск на цьому пристрої. Вкажіть номер телефону і придумайте пароль (мінімум ' + MIN_PASS + ' символів).'
+    : '';
+  $('#authPass2Field').classList.toggle('hidden', !setup);
+  $('#authPass').autocomplete = setup ? 'new-password' : 'current-password';
+  $('#authSubmit').textContent = setup ? 'Створити і увійти' : 'Увійти';
+  $('#authPass').value = '';
+  $('#authPass2').value = '';
+  $('#authError').textContent = '';
+  ($('#authPhone').value ? $('#authPass') : $('#authPhone')).focus();
+}
+
+function unlock(phone) {
+  sessionPhone = phone;
+  authFails = 0;
+  document.body.classList.remove('locked');
+  $('#authPass').value = '';
+  $('#authPass2').value = '';
+  if (!appStarted) {
+    appStarted = true;
+    $('#month').value = currentMonth;
+    resetForm(false);
+  }
+  renderJournal();
+  renderStock();
+}
+
+$('#authForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const err = $('#authError');
+  const btn = $('#authSubmit');
+  const phone = normalizePhone($('#authPhone').value);
+  const pass = $('#authPass').value;
+  if (!phone) { err.textContent = 'Введіть номер у форматі 0XXXXXXXXX'; $('#authPhone').focus(); return; }
+  if (!pass) { err.textContent = 'Введіть пароль'; $('#authPass').focus(); return; }
+
+  btn.disabled = true;
+  err.textContent = '';
+  try {
+    if (!data.auth) {
+      if (pass.length < MIN_PASS) { err.textContent = 'Пароль закороткий: мінімум ' + MIN_PASS + ' символів'; return; }
+      if (pass !== $('#authPass2').value) { err.textContent = 'Паролі не збігаються'; $('#authPass2').focus(); return; }
+      data.auth = await makeAuth(phone, pass);
+      persist();
+      unlock(phone);
+      return;
+    }
+    if (await checkAuth(phone, pass)) { unlock(phone); return; }
+    // Невдала спроба: кожна наступна чекає довше (до 30 с)
+    authFails += 1;
+    const wait = Math.min(30, 2 ** (authFails - 1));
+    $('#authPass').value = '';
+    for (let left = wait; left > 0; left--) {
+      err.textContent = 'Неправильний номер або пароль. Спробуйте через ' + left + ' с';
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    err.textContent = 'Неправильний номер або пароль';
+    $('#authPass').focus();
+  } catch (e) {
+    err.textContent = 'Помилка: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Номер телефону: лише цифри, пробіли, + ( ) -
+document.addEventListener('input', (ev) => {
+  if (ev.target.type === 'tel') ev.target.value = ev.target.value.replace(/[^\d+\s()-]/g, '').slice(0, 19);
+}, true);
+
+$('#btnLogout').addEventListener('click', () => {
+  if (editingId) resetForm(false);
+  sessionPhone = null;
+  showLock();
+});
+
+/* Зміна номера / пароля */
+$('#btnChangePass').addEventListener('click', () => {
+  $('#pwOld').value = ''; $('#pwNew').value = ''; $('#pwNew2').value = '';
+  $('#pwPhone').value = sessionPhone || '';
+  $('#pwError').textContent = '';
+  $('#passDialog').showModal();
+  $('#pwOld').focus();
+});
+$('#pwCancel').addEventListener('click', () => $('#passDialog').close());
+$('#passForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const err = $('#pwError');
+  const phone = normalizePhone($('#pwPhone').value);
+  const pass = $('#pwNew').value;
+  if (!(await checkAuth(sessionPhone, $('#pwOld').value))) { err.textContent = 'Поточний пароль неправильний'; return; }
+  if (!phone) { err.textContent = 'Номер у форматі 0XXXXXXXXX'; return; }
+  if (pass.length < MIN_PASS) { err.textContent = 'Новий пароль: мінімум ' + MIN_PASS + ' символів'; return; }
+  if (pass !== $('#pwNew2').value) { err.textContent = 'Нові паролі не збігаються'; return; }
+  data.auth = await makeAuth(phone, pass);
+  sessionPhone = phone;
+  persist();
+  $('#passDialog').close();
+  $('#saveStatus').textContent = 'Вхід змінено';
+});
+
 /* ================== Старт ================== */
 (async function init() {
   const loaded = await store.load();
@@ -559,10 +707,7 @@ document.addEventListener('animationend', (ev) => ev.target.classList?.remove('r
   }
   applyFont();
   document.body.classList.toggle('is-desktop', IS_DESKTOP);
-  $('#month').value = currentMonth;
-  resetForm(false);
-  renderJournal();
-  renderStock();
+  showLock();
 
   if (!IS_DESKTOP) {
     // Офлайн-режим і захист даних від автоочищення браузером

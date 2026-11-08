@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Застосунок для iPhone: статичні файли з src/, закриті Cloudflare Access
+  "name": "oblik",
+  "compatibility_date": "2026-11-04",
+  "workers_dev": true,
+  // Окремі адреси для кожної версії вимкнено, щоб не обходити Access
+  "preview_urls": false,
+  "assets": {
+    "directory": "src"
+  }
+}

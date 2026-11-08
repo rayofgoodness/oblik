@@ -55,6 +55,10 @@ function createWindow() {
 
 ipcMain.handle('load', () => readData());
 ipcMain.handle('save', (_e, json) => { writeData(json); return true; });
+// Синхронне збереження — перед закриттям вікна, щоб не втратити останню зміну
+ipcMain.on('saveSync', (e, json) => {
+  try { writeData(json); e.returnValue = true; } catch { e.returnValue = false; }
+});
 ipcMain.handle('openDataFolder', () => {
   fs.mkdirSync(dataDir(), { recursive: true });
   shell.openPath(dataDir());
@@ -74,8 +78,21 @@ ipcMain.handle('print', (e) => {
   e.sender.print({ printBackground: true });
 });
 
-app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
-  createWindow();
-});
+// Лише одна копія програми: дві копії одночасно писали б у data.json
+// і заважали б інсталеру оновлення. Повторний запуск показує вже відкрите вікно.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+  app.whenReady().then(() => {
+    Menu.setApplicationMenu(null);
+    createWindow();
+  });
+}
 app.on('window-all-closed', () => app.quit());
