@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f6f5c">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -38,6 +38,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="journal" role="tab">Журнал</button>
       <button class="tab" data-tab="stock" role="tab">Залишки товару</button>
+      <button class="tab" data-tab="shifts" role="tab">Зміни</button>
     </nav>
     <div class="topbar-right">
       <span id="saveStatus" class="save-status"></span>
@@ -50,24 +51,25 @@
       <button id="btnRestore" class="btn ghost" title="Завантажити дані з файлу копії">Відновити</button>
       <input type="file" id="restoreFile" accept=".json,application/json" hidden>
       <button id="btnFolder" class="btn ghost desktop-only" title="Папка, де лежать дані та резервні копії">Папка з даними</button>
-      <button id="btnChangePass" class="btn ghost" title="Змінити номер або пароль для входу">Пароль</button>
-      <button id="btnLogout" class="btn ghost">Вийти</button>
+      <button id="btnChangePass" class="btn ghost web-only" title="Змінити номер або пароль для входу">Пароль</button>
+      <button id="btnLogout" class="btn ghost web-only">Вийти</button>
     </div>
   </header>
 
   <!-- ===== Журнал ===== -->
   <main id="tab-journal" class="page">
     <section class="toolbar">
-      <label class="field inline">
-        <span>Місяць</span>
-        <input type="month" id="month">
-      </label>
+      <div class="shift-info">
+        <span>Поточна зміна</span>
+        <strong id="shiftInfo"></strong>
+      </div>
       <label class="field inline">
         <span>Початковий залишок</span>
         <input type="text" id="opening" inputmode="decimal" class="num" data-signed>
       </label>
       <span id="openingHint" class="hint"></span>
       <div class="spacer"></div>
+      <button id="btnCloseShift" class="btn accent" title="Зберегти зміну в архів і почати нову">Закрити зміну</button>
       <button id="btnJournalCsv" class="btn ghost">Excel (CSV)</button>
       <button id="btnJournalPrint" class="btn ghost">Друк</button>
     </section>
@@ -114,10 +116,83 @@
         <tbody></tbody>
         <tfoot></tfoot>
       </table>
-      <p class="empty hidden" id="journalEmpty">За цей місяць записів немає.</p>
+      <p class="empty hidden" id="journalEmpty">У цій зміні ще немає записів.</p>
     </section>
 
     <section class="card summary" id="summary"></section>
+  </main>
+
+  <!-- ===== Зміни (архів) ===== -->
+  <main id="tab-shifts" class="page hidden">
+    <section id="shiftList">
+      <div class="toolbar"><h2 class="page-title">Закриті зміни</h2></div>
+      <section class="card table-card">
+        <table class="table" id="shiftListTable">
+          <thead>
+            <tr>
+              <th class="c">№</th>
+              <th>Період</th>
+              <th class="r">Записів</th>
+              <th class="r">Надходження</th>
+              <th class="r">Виторг</th>
+              <th class="r">5%</th>
+              <th class="r">Списання</th>
+              <th class="r">Залишок на кінець</th>
+              <th>Коментар</th>
+              <th class="no-print"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty hidden" id="shiftListEmpty">Закритих змін ще немає. Наприкінці зміни натисніть «Закрити зміну» в журналі — вона збережеться тут.</p>
+      </section>
+    </section>
+
+    <section id="shiftView" class="hidden">
+      <div class="toolbar">
+        <button id="btnShiftBack" class="btn ghost">← Усі зміни</button>
+        <div class="shift-head">
+          <h2 class="page-title" id="shiftTitle"></h2>
+          <span class="hint" id="shiftMeta"></span>
+        </div>
+        <div class="spacer"></div>
+        <button id="btnShiftReopen" class="btn ghost hidden" title="Повернути записи цієї зміни в журнал">Відкрити знову</button>
+        <button id="btnShiftCsv" class="btn ghost">Excel (CSV)</button>
+        <button id="btnShiftPrint" class="btn ghost">Друк</button>
+      </div>
+      <section class="card table-card">
+        <div class="print-title" id="shiftPrintTitle"></div>
+        <table class="table" id="shiftTable">
+          <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Найменування</th>
+            <th class="r">Надходження</th>
+            <th class="r">Термінал</th>
+            <th class="r">Каса готівка</th>
+            <th class="r">Витрати<br><small>постачальникам</small></th>
+            <th class="r">Готівка −<br><small>витрати</small></th>
+            <th class="r">Виторг</th>
+            <th class="r">5%</th>
+            <th class="r">Списання</th>
+            <th>Коментар</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+        <p class="empty hidden" id="shiftEmpty">У цій зміні немає записів.</p>
+      </section>
+      <section class="card summary" id="shiftSummary"></section>
+      <section class="card table-card" id="shiftStockCard">
+        <h3 class="card-title">Залишки товару на момент закриття</h3>
+        <table class="table" id="shiftStockTable">
+          <thead><tr><th class="c">№</th><th>Найменування</th><th class="r">Кількість</th><th class="r">Ціна</th><th class="r">Сума</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><td colspan="4">Всього товару на суму</td><td class="r" id="shiftStockTotal"></td></tr></tfoot>
+        </table>
+      </section>
+    </section>
   </main>
 
   <!-- ===== Залишки товару ===== -->
@@ -173,6 +248,20 @@
       <div class="form-actions">
         <button type="submit" class="btn primary" id="pwSave">Зберегти</button>
         <button type="button" class="btn ghost" id="pwCancel">Скасувати</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="closeShiftDialog">
+    <form id="closeShiftForm" novalidate>
+      <h3>Закрити зміну</h3>
+      <p class="hint">Зміна збережеться у вкладці «Зміни», журнал очиститься для нової зміни. Залишки товару не зміняться.</p>
+      <div id="closeShiftSummary"></div>
+      <label class="field"><span>Коментар до зміни (необов'язково)</span>
+        <input type="text" id="closeShiftNote" placeholder="Напр.: здала Олена"></label>
+      <div class="form-actions">
+        <button type="submit" class="btn accent">Закрити зміну</button>
+        <button type="button" class="btn ghost" id="closeShiftCancel">Скасувати</button>
       </div>
     </form>
   </dialog>

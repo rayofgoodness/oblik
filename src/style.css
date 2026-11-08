@@ -245,3 +245,25 @@ body:not(.locked) .lock { display: none; }
 .auth-error { color: var(--danger); margin: 0; min-height: 1.2em; font-size: .92rem; }
 #passForm { display: flex; flex-direction: column; gap: 12px; min-width: min(340px, 80vw); }
 #passForm h3 { margin: 0; }
+
+/* Вхід лише в PWA: на ПК кнопки входу не потрібні */
+body.is-desktop .web-only { display: none !important; }
+
+/* ---------- Зміни ---------- */
+.shift-info { display: flex; flex-direction: column; gap: 4px; }
+.shift-info > span { font-size: .85rem; color: var(--muted); font-weight: 600; }
+.shift-info strong { font-size: 1.05rem; padding: 8px 0; }
+.btn.accent { background: #a3620a; border-color: #a3620a; color: #fff; }
+.btn.accent:hover { filter: brightness(1.08); }
+.btn.small { padding: 5px 12px; font-size: .9rem; }
+.page-title { margin: 0; font-size: 1.3rem; }
+.shift-head { display: flex; flex-direction: column; gap: 2px; }
+.card-title { margin: 0; padding: 14px 16px 6px; font-size: 1rem; }
+.table tr.clickable { cursor: pointer; }
+#closeShiftForm { display: flex; flex-direction: column; gap: 12px; min-width: min(380px, 82vw); }
+#closeShiftForm h3 { margin: 0; }
+#closeShiftForm .hint { margin: 0; }
+#closeShiftSummary { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 6px 0; }
+@media print {
+  #shiftList, .shift-head .hint { display: none !important; }
+}

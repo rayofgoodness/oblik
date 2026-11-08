@@ -1,7 +1,7 @@
 {
   "name": "oblik",
   "productName": "Oblik",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Облік магазину — офлайн",
   "author": {
     "name": "rayofgoodness",
@@ -13,7 +13,9 @@
     "start": "electron .",
     "dist:win": "electron-builder --win --x64",
     "dist:win-zip": "electron-builder --win zip --x64",
-    "deploy:web": "wrangler deploy"
+    "deploy:web": "wrangler deploy",
+    "rust:dev": "tauri dev",
+    "rust:build:win": "PATH=/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:$PATH LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc"
   },
   "build": {
     "appId": "ua.shop.oblik",
@@ -50,6 +52,7 @@
     }
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "electron": "^45.2.3",
     "electron-builder": "^26.18.0",
     "wrangler": "^4.158.0"

@@ -1,0 +1,25 @@
+[package]
+name = "oblik"
+version = "1.2.0"
+description = "Облік магазину — версія на Rust (Tauri)"
+authors = ["rayofgoodness"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+serde_json = "1"
+dirs = "6"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# Маленький і швидкий exe
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

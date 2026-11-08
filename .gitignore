@@ -9,3 +9,7 @@ dist/
 !.dev.vars.example
 .env*
 !.env.example
+
+# Tauri (Rust)
+src-tauri/target/
+src-tauri/gen/

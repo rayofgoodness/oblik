@@ -29,7 +29,7 @@ const store = window.api || {
   print: async () => window.print(),
 };
 
-let data = { version: 2, entries: [], openings: {}, stock: [] };
+let data = normalizeData({});
 
 /* ================== Числа ================== */
 // "1 234,50" / "1234.5" → 1234.5 ; порожнє → 0 ; сміття → NaN
@@ -57,13 +57,6 @@ function todayISO() {
 const fmtDate = (iso) => iso ? iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' + iso.slice(0, 4) : '';
 // Дата й час додавання; старі записи без дати → «—»
 const fmtDateTime = (ts) => ts ? new Date(ts).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-const MONTHS = ['січень', 'лютий', 'березень', 'квітень', 'травень', 'червень', 'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень'];
-const monthTitle = (m) => MONTHS[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
-function prevMonth(m) {
-  let y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1;
-  if (mo === 0) { y -= 1; mo = 12; }
-  return y + '-' + String(mo).padStart(2, '0');
-}
 
 /* ================== Збереження ================== */
 let saveTimer = null;
@@ -93,13 +86,28 @@ window.addEventListener('pagehide', () => {
 
 // Приведення даних до поточної схеми (у т.ч. зі старих копій).
 // v1 → v2: колонка «Готівка» (cash) стала «Витрати постачальникам» (suppliers).
-function normalizeData(raw) {
-  const d = { version: 2, entries: [], openings: {}, stock: [], ...raw };
-  for (const e of d.entries) {
+// v2 → v3: облік змінами — поточна зміна (current + entries) і архів закритих змін (shifts).
+function migrateEntries(list) {
+  for (const e of list || []) {
     if (e.suppliers == null) e.suppliers = Math.abs(e.cash || 0);
     delete e.cash;
   }
-  d.version = 2;
+}
+function normalizeData(raw) {
+  const d = { entries: [], openings: {}, stock: [], shifts: [], ...raw };
+  migrateEntries(d.entries);
+  for (const s of d.shifts) migrateEntries(s.entries);
+  if (!d.current) {
+    // Перехід з обліку по місяцях: усі наявні записи стають поточною зміною,
+    // початковий залишок — той, що був уведений для найпершого місяця
+    const firstMonth = d.entries.map((e) => e.date.slice(0, 7)).sort()[0];
+    const created = d.entries.map((e) => e.created).filter((c) => c > 1e12);
+    d.current = {
+      started: created.length ? Math.min(...created) : Date.now(),
+      opening: firstMonth && d.openings[firstMonth] != null ? d.openings[firstMonth] : null,
+    };
+  }
+  d.version = 3;
   return d;
 }
 
@@ -108,11 +116,9 @@ function normalizeData(raw) {
 const revenueOf = (e) => sum([e.termT, e.cashK]);
 // Готівка в касі після розрахунку з постачальниками
 const cashNetOf = (e) => sum([e.cashK, -(e.suppliers || 0)]);
-const netCell = (n) => numCell(n, n < 0 ? 'c-neg' : '');
 const PERCENT = 5;
 const percentOf = (n) => Math.round(n * PERCENT) / 100; // 5% від суми, до копійки
-const entriesOf = (month) => data.entries.filter((e) => e.date.slice(0, 7) === month)
-  .sort((a, b) => a.date.localeCompare(b.date) || a.created - b.created);
+const sortEntries = (list) => [...list].sort((a, b) => a.date.localeCompare(b.date) || a.created - b.created);
 
 function totalsOf(list) {
   return {
@@ -125,34 +131,44 @@ function totalsOf(list) {
     writeoff: sum(list.map((e) => e.writeoff)),
   };
 }
+// Залишок на кінець = початковий + надходження − виторг − списання
+const closingFrom = (opening, t) => sum([opening, t.income, -t.revenue, -t.writeoff]);
 
-function earliestMonth() {
-  const months = data.entries.map((e) => e.date.slice(0, 7)).concat(Object.keys(data.openings));
-  return months.length ? months.sort()[0] : null;
+/* ================== Зміни ================== */
+const lastShift = () => data.shifts[data.shifts.length - 1];
+const currentShiftNumber = () => data.shifts.length + 1;
+// Початковий залишок поточної зміни: введений вручну або кінцевий попередньої зміни
+function currentOpening() {
+  if (data.current.opening != null) return { value: data.current.opening, auto: false };
+  const prev = lastShift();
+  return { value: prev ? prev.closing : 0, auto: !!prev };
 }
-
-// Початковий залишок: введений вручну або кінцевий залишок попереднього місяця
-function openingOf(month) {
-  if (data.openings[month] != null) return { value: data.openings[month], auto: false };
-  const first = earliestMonth();
-  if (!first || month <= first) return { value: 0, auto: true };
-  return { value: closingOf(prevMonth(month)), auto: true };
-}
-function closingOf(month) {
-  const t = totalsOf(entriesOf(month));
-  return sum([openingOf(month).value, t.income, -t.revenue, -t.writeoff]);
+const isoOf = (ts) => {
+  const d = new Date(ts);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+// Період зміни за датами записів; без записів — за датами відкриття/закриття
+function periodOf(list, fromTs, toTs) {
+  const dates = list.map((e) => e.date).sort();
+  const from = dates[0] || (fromTs ? isoOf(fromTs) : '');
+  const to = dates[dates.length - 1] || (toTs ? isoOf(toTs) : from);
+  if (!from) return '—';
+  return from === to ? fmtDate(from) : fmtDate(from) + ' – ' + fmtDate(to);
 }
 
 /* ================== Журнал: відображення ================== */
-let currentMonth = todayISO().slice(0, 7);
 let editingId = null;
 
 const numCell = (n, cls = '') => `<td class="r ${n ? cls : 'zero'}">${money(n)}</td>`;
+const netCell = (n) => numCell(n, n < 0 ? 'c-neg' : '');
+const totalsCells = (t, strong) =>
+  numCell(t.income, strong ? 'c-income' : '') + numCell(t.termT) + numCell(t.cashK) + numCell(t.suppliers) +
+  netCell(t.cashNet) + numCell(t.revenue, 'c-kasa') + numCell(percentOf(t.revenue)) + numCell(t.writeoff, strong ? 'c-writeoff' : '');
 
-function renderJournal() {
-  const list = entriesOf(currentMonth);
-  const tbody = $('#journalTable tbody');
+// Рядки таблиці журналу, згруповані по днях. editable — з кнопками ✎ ✕ (лише поточна зміна)
+function journalBodyHtml(list, editable) {
   const rows = [];
+  const actionsEmpty = editable ? '<td class="no-print"></td>' : '';
   let i = 0;
   while (i < list.length) {
     const day = list[i].date;
@@ -171,38 +187,26 @@ function renderJournal() {
         ${numCell(percentOf(revenueOf(e)))}
         ${numCell(e.writeoff, 'c-writeoff')}
         <td class="wrap">${esc(e.comment)}</td>
-        <td class="no-print r">
+        ${editable ? `<td class="no-print r">
           <button class="icon-btn" data-edit="${e.id}" title="Редагувати">✎</button>
           <button class="icon-btn del" data-del="${e.id}" title="Видалити">✕</button>
-        </td>
+        </td>` : ''}
       </tr>`);
     });
     if (dayList.length > 1) {
-      const t = totalsOf(dayList);
-      rows.push(`<tr class="day-sum">
-        <td></td><td>Сума за ${fmtDate(day).slice(0, 5)}</td>
-        ${numCell(t.income)}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${netCell(t.cashNet)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff)}
-        <td></td><td class="no-print"></td></tr>`);
+      rows.push(`<tr class="day-sum"><td></td><td>Сума за ${fmtDate(day).slice(0, 5)}</td>
+        ${totalsCells(totalsOf(dayList), false)}<td></td>${actionsEmpty}</tr>`);
     }
   }
-  tbody.innerHTML = rows.join('');
-  $('#journalEmpty').classList.toggle('hidden', list.length > 0);
-
-  const t = totalsOf(list);
-  $('#journalTable tfoot').innerHTML = list.length ? `<tr>
-    <td colspan="2">Заг:</td>
-    ${numCell(t.income, 'c-income')}${numCell(t.termT)}${numCell(t.cashK)}${numCell(t.suppliers)}${netCell(t.cashNet)}${numCell(t.revenue, 'c-kasa')}${numCell(percentOf(t.revenue))}${numCell(t.writeoff, 'c-writeoff')}
-    <td></td><td class="no-print"></td></tr>` : '';
-
-  const op = openingOf(currentMonth);
-  const opEl = $('#opening');
-  if (document.activeElement !== opEl) opEl.value = op.auto && !op.value ? '' : inputNum(op.value);
-  opEl.placeholder = '0,00';
-  $('#openingHint').textContent = op.auto && op.value ? 'перенесено з попереднього місяця' : '';
-
-  const closing = closingOf(currentMonth);
-  $('#summary').innerHTML = `
-    <div class="sum-row"><span>Початковий залишок</span><span>${money(op.value)}</span></div>
+  return rows.join('');
+}
+function journalFootHtml(list, editable) {
+  if (!list.length) return '';
+  return `<tr><td colspan="2">Заг:</td>${totalsCells(totalsOf(list), true)}<td></td>${editable ? '<td class="no-print"></td>' : ''}</tr>`;
+}
+function summaryHtml(opening, t) {
+  return `
+    <div class="sum-row"><span>Початковий залишок</span><span>${money(opening)}</span></div>
     <div class="sum-row"><span>+ Надходження</span><span class="c-income">${money(t.income)}</span></div>
     <div class="sum-row"><span>− Виторг (термінал + каса готівка)</span><span class="c-kasa">${money(t.revenue)}</span></div>
     <div class="sum-row muted sub"><span>термінал</span><span>${money(t.termT)}</span></div>
@@ -211,12 +215,28 @@ function renderJournal() {
     <div class="sum-row"><span>Готівка − витрати</span><span>${money(t.cashNet)}</span></div>
     <div class="sum-row"><span>${PERCENT}% від виторгу</span><span>${money(percentOf(t.revenue))}</span></div>
     <div class="sum-row"><span>− Списання</span><span class="c-writeoff">${money(t.writeoff)}</span></div>
-    <div class="sum-row total"><span>Залишок на кінець</span><strong>${money(closing)}</strong></div>`;
+    <div class="sum-row total"><span>Залишок на кінець</span><strong>${money(closingFrom(opening, t))}</strong></div>`;
+}
 
-  $('#journalPrintTitle').textContent = 'Журнал обліку — ' + monthTitle(currentMonth);
+function renderJournal() {
+  const list = sortEntries(data.entries);
+  $('#journalTable tbody').innerHTML = journalBodyHtml(list, true);
+  $('#journalTable tfoot').innerHTML = journalFootHtml(list, true);
+  $('#journalEmpty').classList.toggle('hidden', list.length > 0);
 
-  // Підказки назв з попередніх записів
-  const names = [...new Set(data.entries.map((e) => e.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk'));
+  const op = currentOpening();
+  const opEl = $('#opening');
+  if (document.activeElement !== opEl) opEl.value = op.auto && !op.value ? '' : inputNum(op.value);
+  opEl.placeholder = '0,00';
+  $('#openingHint').textContent = op.auto ? 'перенесено з попередньої зміни' : '';
+  $('#shiftInfo').textContent = `№${currentShiftNumber()} · з ${fmtDate(isoOf(data.current.started))}`;
+
+  $('#summary').innerHTML = summaryHtml(op.value, totalsOf(list));
+  $('#journalPrintTitle').textContent = `Журнал обліку — зміна №${currentShiftNumber()}, ${periodOf(list, data.current.started, Date.now())}`;
+
+  // Підказки назв з попередніх записів (поточна зміна + архів)
+  const all = data.entries.concat(...data.shifts.map((s) => s.entries));
+  const names = [...new Set(all.map((e) => e.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk'));
   $('#nameList').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join('');
 }
 
@@ -227,17 +247,12 @@ const NUM_FIELDS = ['income', 'termT', 'cashK', 'suppliers', 'writeoff'];
 function resetForm(keepDate) {
   const date = form.date.value;
   form.reset();
-  form.date.value = keepDate && date ? date : defaultDate();
+  form.date.value = keepDate && date ? date : todayISO();
   editingId = null;
   form.classList.remove('editing');
   $('#formTitle').textContent = 'Новий запис';
   $('#btnSubmit').textContent = 'Додати запис';
   $('#btnCancelEdit').classList.add('hidden');
-}
-// Сьогодні, якщо обрано поточний місяць; інакше — перше число обраного
-function defaultDate() {
-  const t = todayISO();
-  return t.slice(0, 7) === currentMonth ? t : currentMonth + '-01';
 }
 
 form.addEventListener('submit', (ev) => {
@@ -264,10 +279,6 @@ form.addEventListener('submit', (ev) => {
     Object.assign(data.entries.find((e) => e.id === editingId), entry);
   } else {
     data.entries.push({ id: uid(), created: Date.now(), ...entry });
-  }
-  if (entry.date.slice(0, 7) !== currentMonth) {
-    currentMonth = entry.date.slice(0, 7);
-    $('#month').value = currentMonth;
   }
   persist();
   resetForm(true);
@@ -305,24 +316,148 @@ $('#journalTable').addEventListener('click', (ev) => {
   }
 });
 
-$('#month').addEventListener('change', (ev) => {
-  if (!ev.target.value) { ev.target.value = currentMonth; return; }
-  currentMonth = ev.target.value;
-  if (!editingId) form.date.value = defaultDate();
-  renderJournal();
-});
-
 $('#opening').addEventListener('change', (ev) => {
   const raw = ev.target.value.trim();
   if (raw === '') {
-    delete data.openings[currentMonth];
+    data.current.opening = null;
   } else {
     const n = parseNum(raw);
     if (Number.isNaN(n)) { alert('Неправильне число'); ev.target.focus(); return; }
-    data.openings[currentMonth] = n;
+    data.current.opening = n;
   }
   persist();
   renderJournal();
+});
+
+/* ================== Закрити зміну ================== */
+$('#btnCloseShift').addEventListener('click', () => {
+  const list = sortEntries(data.entries);
+  if (!list.length) { alert('У поточній зміні ще немає записів — закривати нічого.'); return; }
+  const t = totalsOf(list);
+  const opening = currentOpening().value;
+  $('#closeShiftSummary').innerHTML = `
+    <div class="sum-row"><span>Зміна</span><strong>№${currentShiftNumber()}</strong></div>
+    <div class="sum-row"><span>Період</span><span>${periodOf(list)}</span></div>
+    <div class="sum-row"><span>Записів</span><span>${list.length}</span></div>
+    <div class="sum-row"><span>Надходження</span><span>${money(t.income)}</span></div>
+    <div class="sum-row"><span>Виторг</span><span>${money(t.revenue)}</span></div>
+    <div class="sum-row"><span>${PERCENT}% від виторгу</span><span>${money(percentOf(t.revenue))}</span></div>
+    <div class="sum-row total"><span>Залишок на кінець</span><strong>${money(closingFrom(opening, t))}</strong></div>`;
+  $('#closeShiftNote').value = '';
+  $('#closeShiftDialog').showModal();
+  $('#closeShiftNote').focus();
+});
+$('#closeShiftCancel').addEventListener('click', () => $('#closeShiftDialog').close());
+$('#closeShiftForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  $('#closeShiftDialog').close();
+  closeShift($('#closeShiftNote').value.trim());
+});
+
+// Зберегти поточну зміну в архів і почати нову.
+// Залишки товару не очищуються (товар лишається в магазині), але їх знімок іде в архів.
+function closeShift(note) {
+  if (editingId) resetForm(false);
+  const list = sortEntries(data.entries);
+  const opening = currentOpening().value;
+  const shift = {
+    id: uid(),
+    number: currentShiftNumber(),
+    started: data.current.started,
+    closed: Date.now(),
+    opening,
+    closing: closingFrom(opening, totalsOf(list)),
+    note,
+    entries: list,
+    stock: JSON.parse(JSON.stringify(data.stock)),
+    stockTotal: sum(data.stock.map(stockSumOf)),
+  };
+  data.shifts.push(shift);
+  data.entries = [];
+  data.current = { started: Date.now(), opening: null };
+  persist();
+  resetForm(false);
+  renderJournal();
+  $('#saveStatus').textContent = `Зміну №${shift.number} збережено`;
+}
+
+/* ================== Вкладка «Зміни» ================== */
+let viewedShiftId = null;
+const shiftById = (id) => data.shifts.find((s) => s.id === id);
+
+function renderShifts() {
+  const shift = viewedShiftId && shiftById(viewedShiftId);
+  $('#shiftList').classList.toggle('hidden', !!shift);
+  $('#shiftView').classList.toggle('hidden', !shift);
+  if (shift) { renderShiftView(shift); return; }
+
+  $('#shiftListTable tbody').innerHTML = [...data.shifts].reverse().map((s) => {
+    const t = totalsOf(s.entries);
+    return `<tr class="clickable" data-open="${s.id}">
+      <td class="c"><strong>${s.number}</strong></td>
+      <td>${periodOf(s.entries, s.started, s.closed)}</td>
+      <td class="r">${s.entries.length}</td>
+      ${numCell(t.income, 'c-income')}
+      ${numCell(t.revenue, 'c-kasa')}
+      ${numCell(percentOf(t.revenue))}
+      ${numCell(t.writeoff, 'c-writeoff')}
+      <td class="r"><strong>${money(s.closing)}</strong></td>
+      <td class="wrap">${esc(s.note)}</td>
+      <td class="no-print r"><button class="btn ghost small" data-open="${s.id}">Відкрити</button></td>
+    </tr>`;
+  }).join('');
+  $('#shiftListEmpty').classList.toggle('hidden', data.shifts.length > 0);
+  $('#shiftListTable').classList.toggle('hidden', data.shifts.length === 0);
+}
+
+function renderShiftView(s) {
+  const t = totalsOf(s.entries);
+  const period = periodOf(s.entries, s.started, s.closed);
+  $('#shiftTitle').textContent = `Зміна №${s.number}`;
+  $('#shiftMeta').textContent = `${period} · закрита ${fmtDateTime(s.closed)}${s.note ? ' · ' + s.note : ''}`;
+  $('#shiftPrintTitle').textContent = `Журнал обліку — зміна №${s.number}, ${period}`;
+  $('#shiftTable tbody').innerHTML = journalBodyHtml(s.entries, false);
+  $('#shiftTable tfoot').innerHTML = journalFootHtml(s.entries, false);
+  $('#shiftEmpty').classList.toggle('hidden', s.entries.length > 0);
+  $('#shiftSummary').innerHTML = summaryHtml(s.opening, t);
+
+  const stock = s.stock || [];
+  $('#shiftStockCard').classList.toggle('hidden', stock.length === 0);
+  $('#shiftStockTable tbody').innerHTML = stock.map((x, i) => `<tr>
+      <td class="c">${i + 1}</td><td>${esc(x.name)}</td>
+      <td class="r">${qtyFmt.format(x.qty || 0)} ${x.unit === 'g' ? 'г' : 'шт'}</td>
+      <td class="r">${money(x.price)} ${x.unit === 'g' ? 'за кг' : 'за шт'}</td>
+      <td class="r"><strong>${money(stockSumOf(x))}</strong></td></tr>`).join('');
+  $('#shiftStockTotal').textContent = money(s.stockTotal);
+
+  // Помилково закриту зміну можна відкрити знову — лише останню і лише поки нова порожня
+  $('#btnShiftReopen').classList.toggle('hidden', !(s === lastShift() && data.entries.length === 0));
+}
+
+$('#shiftListTable').addEventListener('click', (ev) => {
+  const id = ev.target.closest('[data-open]')?.dataset.open;
+  if (!id) return;
+  viewedShiftId = id;
+  renderShifts();
+  window.scrollTo({ top: 0 });
+});
+$('#btnShiftBack').addEventListener('click', () => { viewedShiftId = null; renderShifts(); });
+$('#btnShiftPrint').addEventListener('click', () => store.print());
+$('#btnShiftCsv').addEventListener('click', () => {
+  const s = shiftById(viewedShiftId);
+  if (s) exportJournalCsv(s.entries, s.opening, `Зміна ${s.number} (${periodOf(s.entries, s.started, s.closed)}).csv`);
+});
+$('#btnShiftReopen').addEventListener('click', () => {
+  const s = shiftById(viewedShiftId);
+  confirmDelete(`Відкрити зміну №${s.number} знову? Її записи повернуться в журнал, і її можна буде доповнити й закрити ще раз.`, () => {
+    data.shifts = data.shifts.filter((x) => x.id !== s.id);
+    data.entries = s.entries;
+    data.current = { started: s.started, opening: s.opening };
+    viewedShiftId = null;
+    persist();
+    showTab('journal');
+    $('#saveStatus').textContent = `Зміну №${s.number} відкрито знову`;
+  }, 'Так, відкрити');
 });
 
 /* ================== Залишки товару ================== */
@@ -422,16 +557,18 @@ const csvCell = (v) => {
 };
 const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(';')).join('\r\n');
 
-$('#btnJournalCsv').addEventListener('click', () => {
-  const list = entriesOf(currentMonth);
+function exportJournalCsv(list, opening, fileName) {
   const t = totalsOf(list);
   const rows = [['Дата', 'Найменування', 'Надходження', 'Каса термінал', 'Каса готівка', 'Витрати (постачальникам)', 'Готівка − витрати', 'Виторг', `${PERCENT}%`, 'Списання', 'Коментар']];
   for (const e of list) rows.push([fmtDate(e.date), e.name, e.income, e.termT, e.cashK, e.suppliers, cashNetOf(e), revenueOf(e), percentOf(revenueOf(e)), e.writeoff, e.comment]);
   rows.push(['Заг:', '', t.income, t.termT, t.cashK, t.suppliers, t.cashNet, t.revenue, percentOf(t.revenue), t.writeoff, '']);
   rows.push([]);
-  rows.push(['Початковий залишок', '', openingOf(currentMonth).value]);
-  rows.push(['Залишок на кінець', '', closingOf(currentMonth)]);
-  store.exportFile(`Журнал ${currentMonth}.csv`, toCsv(rows), 'csv');
+  rows.push(['Початковий залишок', '', opening]);
+  rows.push(['Залишок на кінець', '', closingFrom(opening, t)]);
+  store.exportFile(fileName, toCsv(rows), 'csv');
+}
+$('#btnJournalCsv').addEventListener('click', () => {
+  exportJournalCsv(sortEntries(data.entries), currentOpening().value, `Зміна ${currentShiftNumber()} (поточна, ${fmtDate(todayISO())}).csv`);
 });
 
 $('#btnStockCsv').addEventListener('click', () => {
@@ -477,26 +614,30 @@ $('#restoreFile').addEventListener('change', async (ev) => {
     return;
   }
   confirmDelete(
-    `Замінити всі поточні дані даними з копії? У копії: ${parsed.entries.length} записів журналу, ${parsed.stock.length} товарів. Поточні дані буде втрачено.`,
+    `Замінити всі поточні дані даними з копії? У копії: ${parsed.entries.length} записів поточної зміни, ${(parsed.shifts || []).length} закритих змін, ${parsed.stock.length} товарів. Поточні дані буде втрачено.`,
     () => {
       data = normalizeData({ ...parsed, auth: data.auth });
       persist();
       applyFont();
       resetForm(false);
+      viewedShiftId = null;
       renderJournal();
       renderStock();
+      renderShifts();
     },
     'Так, замінити'
   );
 });
 
 /* ================== Вкладки ================== */
-document.querySelectorAll('.tab').forEach((btn) => btn.addEventListener('click', () => {
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b === btn));
-  $('#tab-journal').classList.toggle('hidden', btn.dataset.tab !== 'journal');
-  $('#tab-stock').classList.toggle('hidden', btn.dataset.tab !== 'stock');
-  if (btn.dataset.tab === 'stock') renderStock(); else renderJournal();
-}));
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  for (const t of ['journal', 'stock', 'shifts']) $('#tab-' + t).classList.toggle('hidden', t !== name);
+  if (name === 'stock') renderStock();
+  else if (name === 'shifts') { viewedShiftId = null; renderShifts(); }
+  else renderJournal();
+}
+document.querySelectorAll('.tab').forEach((btn) => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
 
 /* ================== Розмір шрифту ================== */
 const FONT_MIN = 13, FONT_MAX = 28, FONT_DEFAULT = 17;
@@ -618,7 +759,6 @@ function unlock(phone) {
   $('#authPass2').value = '';
   if (!appStarted) {
     appStarted = true;
-    $('#month').value = currentMonth;
     resetForm(false);
   }
   renderJournal();
@@ -707,7 +847,9 @@ $('#passForm').addEventListener('submit', async (ev) => {
   }
   applyFont();
   document.body.classList.toggle('is-desktop', IS_DESKTOP);
-  showLock();
+  // Вхід потрібен лише в PWA (телефон / сайт). Програма на ПК відкривається одразу.
+  if (IS_DESKTOP) unlock(null);
+  else showLock();
 
   if (!IS_DESKTOP) {
     // Офлайн-режим і захист даних від автоочищення браузером
