@@ -572,7 +572,7 @@ let authFails = 0;
 const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-// 067 105 08 34 / +380671050834 / 380671050834 → 0671050834 ; інакше null
+// 050 123 45 67 / +380501234567 / 380501234567 → 0501234567 ; інакше null
 function normalizePhone(v) {
   let d = String(v || '').replace(/\D/g, '');
   if (d.length === 12 && d.startsWith('380')) d = '0' + d.slice(3);
